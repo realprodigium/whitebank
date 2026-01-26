@@ -4,10 +4,37 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WhiteBank | X API</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <link href="{{ url_for('static', path='/style.css') }}" rel="stylesheet">
-    <script src="{{ url_for('static', path='script.js') }}"></script>
 </head>
 <body>
-    <button id="login" >Acceder con X</button>
+    <div class="container" id="container">
+        <div class="form-container sign-in-container">
+            <form>
+                <h1>Login</h1>
+                <div class="social-container">
+                    <a href="#" class="social"><i data-lucide='bookmark-check'></i></a>
+                    <a href="#" class="social"><i data-lucide='shield-check'></i></a>
+                    <a href="#" class="social"><i data-lucide="arrow-down-narrow-wide"></i></a>
+                </div>
+                <button id="login">SignIn with X</button>
+            </form>
+        </div>
+        <div class="overlay-container">
+            <div class="overlay">
+                <div class="overlay-panel overlay-left">
+                    <h1>Welcome To WhiteBank</h1>
+                    <p>WebApp for better sorter bookmarks from X before Twitter</p>
+                    <button class="ghost" id="signIn">I want to know more</button>
+                </div>
+                <div class="overlay-panel overlay-right">
+                    <h1>Welcome To WhiteBank</h1>
+                    <p>WebApp for better sorter bookmarks from X before Twitter</p>
+                    <button class="ghost" id="signIn">I want to know more</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', path='script.js') }}"></script>
 </body>
 </html>

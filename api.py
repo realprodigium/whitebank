@@ -25,7 +25,7 @@ def generate_pkce():
 @router.get('/auth/x/login')
 def login():
     client_id = os.getenv('CLIENT_ID')
-    redirect_uri = 'http://127.0.0.1:8000/auth/x/callback'
+    redirect_uri = 'http://localhost:8000/auth/x/callback'
 
     state = secrets.token_urlsafe(32)
     code_verifier, code_challenge = generate_pkce()
@@ -34,7 +34,7 @@ def login():
 
     scopes = 'tweet.read users.read bookmarks.read offline.access'
     auth_url = (
-        f"https://twitter.com/i/oauth2/authorize?"
+        f"https://x.com/i/oauth2/authorize?"
         f"response_type=code&"
         f"client_id={client_id}&"
         f"redirect_uri={redirect_uri}&"
@@ -50,14 +50,14 @@ async def callback(request: Request):
     code = request.query_params.get('code')
     state = request.query_params.get('state')
 
-    if not code or not state not in oauth_states:
+    if not code or not state or state not in oauth_states:
         return {'error': 'invalid request'}
     code_verifier = oauth_states.pop(state)
 
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
-    redirect_uri = 'http://127.0.0.1:8000/auth/x/callback'
-    token_url = 'https://api.twitter.com/2/oauth2/token'
+    redirect_uri = 'http://localhost::8000/auth/x/callback'
+    token_url = 'https://api.x.com/2/oauth2/token'
 
     credentials = f'{client_id}:{client_secret}'
     b64_credentials = base64.b64encode(credentials.encode()).decode()
@@ -69,9 +69,9 @@ async def callback(request: Request):
 
     data = {
         'code':code,
-        'grant-type':'authorization_code',
+        'grant_type':'authorization_code',
         'redirect_uri':redirect_uri,
-        code_verifier:code_verifier
+        'code_verifier':code_verifier
     }
     async with httpx.AsyncClient() as client:
         response = await client.post(token_url, headers=headers, data=data)
