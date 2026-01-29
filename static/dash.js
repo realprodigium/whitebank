@@ -161,6 +161,10 @@ function showEmpty() {
     const emptyState = document.getElementById('emptyState');
     tableContainer.style.display = 'none';
     emptyState.style.display = 'flex';
+    // Initialize Lucide icons
+    if (window.lucide) {
+        lucide.createIcons();
+    }
 }
 
 function showError(message) {
@@ -200,6 +204,11 @@ function renderBookmarks() {
             const row = createBookmarkRow(bookmark, index);
             bookmarksBody.appendChild(row);
         });
+        
+        // Initialize Lucide icons after rendering
+        if (window.lucide) {
+            lucide.createIcons();
+        }
     }
     
     updateStats();
