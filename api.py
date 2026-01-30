@@ -10,11 +10,15 @@ import sqlite3
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from typing import Optional
+import json
+import time
 
 load_dotenv()
 
 router = APIRouter()
 DB_PATH = 'bookmarks.db'
+
+bookmarks_cache = {}
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -33,6 +37,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS user_tokens (
             user_id TEXT PRIMARY KEY,
             access_token TEXT NOT NULL,
+            refresh_token TEXT,
             username TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -55,6 +60,78 @@ def generate_pkce():
         hashlib.sha256(code_verifier.encode('utf-8')).digest()
     ).decode('utf-8').rstrip('=')
     return code_verifier, code_challenge
+
+
+async def refresh_access_token(user_id: str) -> Optional[str]:
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT refresh_token FROM user_tokens WHERE user_id = ?', (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row or not row['refresh_token']:
+            print(f'No refresh token found for user {user_id}')
+            return None
+        
+        refresh_token = row['refresh_token']
+        client_id = os.getenv('CLIENT_ID')
+        client_secret = os.getenv('CLIENT_SECRET')
+        
+        if not client_id or not client_secret:
+            print(f'Missing CLIENT_ID or CLIENT_SECRET in environment')
+            return None
+        
+        token_url = 'https://api.x.com/2/oauth2/token'
+        
+        credentials = f'{client_id}:{client_secret}'
+        b64_credentials = base64.b64encode(credentials.encode()).decode()
+        
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Authorization': f'Basic {b64_credentials}'
+        }
+        
+        data = {
+            'grant_type': 'refresh_token',
+            'refresh_token': refresh_token
+        }
+        
+        print(f'Attempting to refresh token for user {user_id}')
+        
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(token_url, headers=headers, data=data)
+            
+            print(f'Token refresh response status: {response.status_code}')
+            
+            if response.status_code == 200:
+                tokens = response.json()
+                new_access_token = tokens.get('access_token')
+                new_refresh_token = tokens.get('refresh_token', refresh_token)
+                
+                if not new_access_token:
+                    print('No access_token in refresh response')
+                    return None
+                
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    'UPDATE user_tokens SET access_token = ?, refresh_token = ?, updated_at = ? WHERE user_id = ?',
+                    (new_access_token, new_refresh_token, datetime.now().isoformat(), user_id)
+                )
+                conn.commit()
+                conn.close()
+                
+                print(f'Token refreshed successfully for user {user_id}')
+                return new_access_token
+            else:
+                print(f'Token refresh failed: {response.status_code} - {response.text}')
+                return None
+    except Exception as e:
+        print(f'Error refreshing token: {str(e)}')
+        import traceback
+        traceback.print_exc()
+        return None
 
 
 @router.get('/auth/x/login')
@@ -136,6 +213,7 @@ async def callback(request: Request):
             return {'error': 'token request failed', 'details': response.json()}
         tokens = response.json()
         access_token = tokens.get('access_token')
+        refresh_token = tokens.get('refresh_token') 
         
         user_info_headers = {'Authorization': f'Bearer {access_token}'}
         user_response = await client.get('https://api.x.com/2/users/me', headers=user_info_headers)
@@ -148,8 +226,8 @@ async def callback(request: Request):
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute(
-                'INSERT OR REPLACE INTO user_tokens (user_id, access_token, username, updated_at) VALUES (?, ?, ?, ?)',
-                (user_id, access_token, username, datetime.now().isoformat())
+                'INSERT OR REPLACE INTO user_tokens (user_id, access_token, refresh_token, username, updated_at) VALUES (?, ?, ?, ?, ?)',
+                (user_id, access_token, refresh_token, username, datetime.now().isoformat())
             )
             conn.commit()
             conn.close()
@@ -161,30 +239,53 @@ async def callback(request: Request):
 @router.get('/api/bookmarks')
 async def get_bookmarks(user_id: str, query: Optional[str] = None, max_results: int = 10):
     try:
-        # Validate user_id format
+        print(f'\n=== BOOKMARKS REQUEST ===')
+        print(f'User ID: {user_id}')
+        print(f'Max Results: {max_results}')
+        
         if not user_id or not isinstance(user_id, str):
+            print('❌ Invalid user_id')
             return JSONResponse(
                 status_code=400,
                 content={'error': 'Invalid user_id', 'data': []}
             )
         
-        # Get token from database
+        if user_id in bookmarks_cache:
+            cache_time = bookmarks_cache[user_id].get('timestamp', 0)
+            cache_age = time.time() - cache_time
+            if cache_age < 300:  
+                print(f'Using cached bookmarks (age: {cache_age:.1f}s)')
+                return JSONResponse(
+                    status_code=200,
+                    content={'data': bookmarks_cache[user_id]['bookmarks'], 'cached': True}
+                )
+            else:
+                print(f'Cache expired ({cache_age:.1f}s old), fetching fresh data')
+                del bookmarks_cache[user_id]
+        
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT access_token, username FROM user_tokens WHERE user_id = ?', (user_id,))
+        cursor.execute('SELECT access_token, refresh_token, username FROM user_tokens WHERE user_id = ?', (user_id,))
         row = cursor.fetchone()
         conn.close()
         
         if not row:
+            print('❌ User not authenticated (not in DB)')
             return JSONResponse(
                 status_code=401,
                 content={'error': 'User not authenticated', 'data': []}
             )
         
         access_token = row['access_token']
+        refresh_token = row['refresh_token']
         username = row['username']
         
+        print(f'User found: {username}')
+        print(f'Access Token: {access_token[:50] if access_token else "NULL"}...')
+        print(f'Refresh Token exists: {"YES" if refresh_token else "NO"}')
+        
         if not access_token or not access_token.strip():
+            print('❌ Invalid or empty access_token')
             return JSONResponse(
                 status_code=401,
                 content={'error': 'Invalid token', 'data': []}
@@ -200,80 +301,73 @@ async def get_bookmarks(user_id: str, query: Optional[str] = None, max_results: 
         }
         
         url = f'https://api.x.com/2/users/{user_id}/bookmarks'
+        print(f'Requesting: {url}')
         
-        # Fetch with timeout and retry logic
-        max_retries = 3
-        timeout_seconds = 10
-        last_error = None
-        
-        async with httpx.AsyncClient(timeout=timeout_seconds) as client:
-            for attempt in range(max_retries):
-                try:
-                    response = await client.get(url, headers=headers, params=params)
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        # Ensure response has proper structure
-                        if not isinstance(data, dict):
-                            data = {'data': []}
-                        if 'data' not in data:
-                            data['data'] = []
-                        return data
-                    
-                    elif response.status_code == 401:
-                        # Token expired, return empty but not an error
-                        return JSONResponse(
-                            status_code=200,
-                            content={'data': [], 'message': 'Token may need refresh'}
-                        )
-                    
-                    elif response.status_code == 429:
-                        # Rate limited, wait and retry
-                        if attempt < max_retries - 1:
-                            await asyncio.sleep(2 ** attempt)
-                            continue
-                        else:
-                            last_error = 'Rate limited by X API'
-                    
-                    else:
-                        # Other errors, try to parse
-                        try:
-                            error_details = response.json()
-                            last_error = error_details.get('errors', [{}])[0].get('message', f'HTTP {response.status_code}')
-                        except:
-                            last_error = f'HTTP {response.status_code}'
-                        
-                        if attempt < max_retries - 1:
-                            await asyncio.sleep(1)
-                            continue
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(url, headers=headers, params=params)
+            
+            print(f'API Response Status: {response.status_code}')
+            
+            if response.status_code == 401:
+                print('Token expired (401), attempting refresh...')
+                new_token = await refresh_access_token(user_id)
                 
-                except httpx.TimeoutException:
-                    last_error = 'Request timeout'
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(1)
-                        continue
-                except httpx.NetworkError as e:
-                    last_error = f'Network error: {str(e)}'
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(1)
-                        continue
-                except Exception as e:
-                    last_error = f'Unexpected error: {str(e)}'
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(1)
-                        continue
-        
-        # If all retries failed, return empty data instead of error
-        return JSONResponse(
-            status_code=200,
-            content={
-                'data': [],
-                'message': f'Could not fetch bookmarks: {last_error}. Showing cached data if available.'
-            }
-        )
+                if new_token:
+                    print(f'Token refreshed successfully for user {user_id}')
+                    headers['Authorization'] = f'Bearer {new_token}'
+                    response = await client.get(url, headers=headers, params=params)
+                    print(f'Retry response status: {response.status_code}')
+                else:
+                    print(f'Failed to refresh token for user {user_id} - refresh_token may be invalid')
+                    return JSONResponse(
+                        status_code=401,
+                        content={'error': 'Session expired, please login again', 'data': []}
+                    )
+            
+            if response.status_code == 200:
+                data = response.json()
+                bookmarks_data = data.get('data', [])
+                bookmarks_count = len(bookmarks_data)
+                print(f'API Response Status: 200')
+                print(f'Bookmarks count: {bookmarks_count}')
+                if bookmarks_count > 0:
+                    print(f'First bookmark: {bookmarks_data[0]}')
+                   
+                    bookmarks_cache[user_id] = {
+                        'bookmarks': bookmarks_data,
+                        'timestamp': time.time()
+                    }
+                if not isinstance(data, dict):
+                    data = {'data': []}
+                if 'data' not in data:
+                    data['data'] = []
+                return data
+            
+            elif response.status_code == 429:
+                print('Rate limited (429)')
+                if user_id in bookmarks_cache:
+                    print(f'Returning stale cache due to rate limit')
+                    return JSONResponse(
+                        status_code=200,
+                        content={'data': bookmarks_cache[user_id]['bookmarks'], 'message': 'Using cached data due to rate limit'}
+                    )
+                return JSONResponse(
+                    status_code=200,
+                    content={'data': [], 'message': 'Rate limited, try again later'}
+                )
+            
+            else:
+                print(f'Unexpected status: {response.status_code}')
+                print(f'Response: {response.text}')
+                return JSONResponse(
+                    status_code=200,
+                    content={'data': [], 'message': f'Error fetching bookmarks: {response.status_code}'}
+                )
     
     except Exception as e:
         print(f'Error in get_bookmarks: {str(e)}')
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={'error': 'Server error', 'data': []}
@@ -294,7 +388,7 @@ async def search_bookmarks(user_id: str, query: str, max_results: int = 10):
     headers = {'Authorization': f'Bearer {access_token}'}
     
     params = {
-        'max_results': 100,
+        'max_results': 10,
         'tweet.fields': 'author_id,created_at,public_metrics,lang',
         'expansions': 'author_id',
         'user.fields': 'name,username,verified'

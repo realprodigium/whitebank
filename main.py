@@ -26,7 +26,6 @@ def get_username(user_id: str) -> str:
         return 'Unknown'
 
 def user_exists(user_id: str) -> bool:
-    """Check if user has valid token in database"""
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
@@ -51,7 +50,6 @@ def dashboard(request: Request):
 
 @app.get('/api/session')
 async def get_session(user_id: str):
-    """Validate and get session info"""
     if not user_id:
         return JSONResponse(
             status_code=401,
@@ -72,15 +70,7 @@ async def get_session(user_id: str):
 
 @app.get('/api/logout')
 async def logout(user_id: str):
-    """Logout user (clear from frontend localStorage)"""
     try:
-        # Optionally delete token from database if you want to invalidate it
-        # conn = sqlite3.connect(DB_PATH)
-        # cursor = conn.cursor()
-        # cursor.execute('DELETE FROM user_tokens WHERE user_id = ?', (user_id,))
-        # conn.commit()
-        # conn.close()
-        
         return JSONResponse(
             status_code=200,
             content={'message': 'Logged out successfully'}

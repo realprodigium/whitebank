@@ -26,31 +26,15 @@
                 <h3 class="control-title">Sort</h3>
                 <nav class="sort-nav" role="navigation" aria-label="Ordenar bookmarks">
                     <button class="sort-btn active" data-sort="latest">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <polyline points="19 12 12 19 5 12"></polyline>
-                        </svg>
                         Newest
                     </button>
                     <button class="sort-btn" data-sort="oldest">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="19" x2="12" y2="5"></line>
-                            <polyline points="5 12 12 5 19 12"></polyline>
-                        </svg>
                         Oldest
                     </button>
                     <button class="sort-btn" data-sort="alpha">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M3.5 8.5l3-3 3 3M6.5 5.5v13"></path>
-                            <path d="M14.5 4h5l-5 16h5"></path>
-                        </svg>
                         A-Z
                     </button>
                     <button class="sort-btn" data-sort="reverse_alpha">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M3.5 15.5l3 3 3-3M6.5 18.5v-13"></path>
-                            <path d="M14.5 4h5l-5 16h5"></path>
-                        </svg>
                         Z-A
                     </button>
                 </nav>
@@ -73,22 +57,8 @@
                 <h3 class="control-title">View</h3>
                 <div class="view-toggle">
                     <button class="view-btn active" data-view="compact" aria-label="Vista compacta">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="8" y1="6" x2="21" y2="6"></line>
-                            <line x1="8" y1="12" x2="21" y2="12"></line>
-                            <line x1="8" y1="18" x2="21" y2="18"></line>
-                            <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                            <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                            <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                        </svg>
                     </button>
                     <button class="view-btn" data-view="detailed" aria-label="Vista detallada">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="7" height="7"></rect>
-                            <rect x="14" y="3" width="7" height="7"></rect>
-                            <rect x="14" y="14" width="7" height="7"></rect>
-                            <rect x="3" y="14" width="7" height="7"></rect>
-                        </svg>
                     </button>
                 </div>
             </div>
@@ -134,7 +104,6 @@
 
     {% block javascript %}
     <script src="{{ url_for('static', path='dash.js') }}"></script>
-    <script src="{{ url_for('static', path='script.js') }}"></script>
     {% endblock %}
 </body>
 </html>

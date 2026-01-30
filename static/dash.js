@@ -1,6 +1,3 @@
-// Sample bookmark data - Replace with actual data from backend
-const sampleBookmarks = [];
-
 // State management
 let bookmarks = [];
 let currentSort = 'latest';
@@ -10,10 +7,8 @@ let searchTerm = '';
 // Get user_id from URL params or localStorage
 let userId = new URLSearchParams(window.location.search).get('user_id');
 if (userId) {
-    // Save to localStorage when received from auth
     localStorage.setItem('user_id', userId);
 } else {
-    // Try to restore from localStorage
     userId = localStorage.getItem('user_id');
 }
 
@@ -28,13 +23,11 @@ const viewButtons = document.querySelectorAll('.view-btn');
 const logoutBtn = document.querySelector('.logout-btn');
 const usernameEl = document.getElementById('username');
 
-// Initialize
 document.addEventListener('DOMContentLoaded', () => {
     validateSession();
     attachEventListeners();
 });
 
-// Validate session on page load
 async function validateSession() {
     if (!userId) {
         redirectToLogin('No se encontró sesión');
@@ -46,22 +39,18 @@ async function validateSession() {
         const data = await res.json();
         
         if (!data.authenticated) {
-            // Session invalid, clear localStorage and redirect
             localStorage.removeItem('user_id');
             redirectToLogin('Sesión expirada. Por favor, inicia sesión nuevamente');
             return;
         }
         
-        // Update username display
         if (usernameEl && data.username) {
-            usernameEl.textContent = data.username;
+            usernameEl.textContent = `@${data.username}`;
         }
         
-        // Session valid, load bookmarks
         loadBookmarks();
     } catch (err) {
         console.error('Error validating session:', err);
-        // Assume session might be valid, try to load anyway
         loadBookmarks();
     }
 }
@@ -73,120 +62,131 @@ function redirectToLogin(message) {
     window.location.href = '/';
 }
 
-// Load and render bookmarks
-function loadBookmarks() {
+function loadBookmarks(retryCount = 0) {
     if (!userId) {
-        console.error('No user_id found in URL');
+        console.error('No user_id found');
         showError('No se pudo identificar el usuario');
         return;
     }
     
-    // Show loading state
     const tableContainer = document.querySelector('.table-container');
     const emptyState = document.getElementById('emptyState');
-    tableContainer.innerHTML = '<div style="text-align: center; padding: 40px;">Cargando bookmarks...</div>';
+    tableContainer.innerHTML = '<div style="text-align: center; padding: 40px; color: #6C757D;">Cargando bookmarks...</div>';
     emptyState.style.display = 'none';
     
-    fetchBookmarksWithRetry(0);
-}
-
-// Fetch with retry logic
-function fetchBookmarksWithRetry(retryCount = 0, maxRetries = 3) {
-    const timeout = setTimeout(() => {
-        console.warn('Request timeout, retrying...');
-        if (retryCount < maxRetries) {
-            fetchBookmarksWithRetry(retryCount + 1, maxRetries);
-        } else {
-            showError('Tiempo de espera agotado al cargar bookmarks');
-        }
-    }, 15000); // 15 second timeout
+    console.log('Fetching bookmarks for user:', userId, `(Attempt ${retryCount + 1})`);
     
-    fetch(`/api/bookmarks?user_id=${userId}`, {
+    fetch(`/api/bookmarks?user_id=${userId}&max_results=100`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     })
         .then(res => {
-            clearTimeout(timeout);
+            console.log('Response status:', res.status);
             
+            if (res.status === 401) {
+                localStorage.removeItem('user_id');
+                redirectToLogin('Sesión expirada. Por favor, inicia sesión nuevamente');
+                throw new Error('Unauthorized');
+            }
             if (!res.ok) {
                 throw new Error(`HTTP ${res.status}`);
             }
             return res.json();
         })
         .then(data => {
-            // Validate response structure
+            console.log('API Response:', data);
+            
             if (!data) {
                 throw new Error('Empty response');
             }
             
-            // Extract bookmarks data
-            const bookmarksList = data.data || data.bookmarks || [];
+            const bookmarksList = data.data || [];
+            const message = data.message || '';
+            
+            console.log('Bookmarks received:', bookmarksList.length);
+            console.log('Response message:', message);
+            
+            if (message && message.includes('Rate limited') && retryCount < 3) {
+                console.log('Rate limited, retrying in 2 seconds...');
+                setTimeout(() => {
+                    loadBookmarks(retryCount + 1);
+                }, 2000 * (retryCount + 1));
+                return;
+            }
             
             if (!Array.isArray(bookmarksList)) {
+                console.error('Invalid data format:', typeof bookmarksList);
                 throw new Error('Invalid data format');
             }
             
-            // Map tweets to bookmarks format
             bookmarks = bookmarksList.map(tweet => ({
                 id: tweet.id || 'unknown',
                 content: tweet.text || 'Sin contenido',
-                created_at: tweet.created_at || new Date().toISOString()
+                created_at: tweet.created_at || new Date().toISOString(),
+                author_id: tweet.author_id
             })).filter(b => b.id && b.id !== 'unknown');
             
+            console.log(`Processed ${bookmarks.length} bookmarks`);
+            
             if (bookmarks.length === 0) {
-                showEmpty();
+                if (message && message.includes('Rate limited')) {
+                    showError('La API está siendo utilizada intensamente. Intenta más tarde.');
+                } else {
+                    showEmpty(
+                        'No tienes bookmarks guardados en X',
+                        'Ve a X (Twitter), haz clic en el ícono de bookmark en cualquier tweet para guardarlo, y luego recarga esta página.'
+                    );
+                }
             } else {
                 renderBookmarks();
             }
             updateStats();
         })
         .catch(err => {
-            clearTimeout(timeout);
             console.error('Error loading bookmarks:', err);
-            
-            // Retry logic
-            if (retryCount < maxRetries) {
-                console.log(`Reintentando... (${retryCount + 1}/${maxRetries})`);
-                setTimeout(() => {
-                    fetchBookmarksWithRetry(retryCount + 1, maxRetries);
-                }, Math.min(1000 * Math.pow(2, retryCount), 5000)); // Exponential backoff
-            } else {
-                showError(`No se pudieron cargar los bookmarks después de ${maxRetries} intentos. Por favor, recarga la página.`);
+            if (err.message !== 'Unauthorized') {
+                showError('Error al cargar bookmarks. Verifica tu conexión e intenta nuevamente.');
             }
         });
 }
 
-function showEmpty() {
+function showEmpty(message = 'No se encontraron bookmarks', hint = '') {
     const tableContainer = document.querySelector('.table-container');
     const emptyState = document.getElementById('emptyState');
     tableContainer.style.display = 'none';
     emptyState.style.display = 'flex';
-    // Initialize Lucide icons
-    if (window.lucide) {
-        lucide.createIcons();
-    }
+    
+    emptyState.innerHTML = `
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: #ADB5BD;">
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <p style="color: #6C757D; margin-bottom: 8px; font-weight: 500;">${message}</p>
+        ${hint ? `<p style="color: #ADB5BD; font-size: 0.875rem; max-width: 400px; text-align: center;">${hint}</p>` : ''}
+        <a href="https://x.com" target="_blank" style="margin-top: 20px; padding: 10px 20px; background: #1B2434; color: white; border: none; border-radius: 8px; cursor: pointer; text-decoration: none; font-family: inherit; display: inline-block;">
+            Ir a X para guardar bookmarks
+        </a>
+    `;
 }
 
 function showError(message) {
     const tableContainer = document.querySelector('.table-container');
     const emptyState = document.getElementById('emptyState');
     tableContainer.innerHTML = `
-        <div style="text-align: center; padding: 40px; color: #e74c3c;">
+        <div style="text-align: center; padding: 40px; color: #DC2626;">
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 20px;">
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="12" y1="8" x2="12" y2="12"></line>
                 <line x1="12" y1="16" x2="12.01" y2="16"></line>
             </svg>
-            <p>${message}</p>
-            <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                Recargar página
+            <p style="margin-bottom: 20px;">${message}</p>
+            <button onclick="loadBookmarks()" style="padding: 10px 20px; background: #1B2434; color: white; border: none; border-radius: 8px; cursor: pointer; font-family: inherit;">
+                Reintentar
             </button>
         </div>
     `;
     emptyState.style.display = 'none';
 }
 
-// Render bookmarks to table
 function renderBookmarks() {
     const filteredBookmarks = getFilteredBookmarks();
     const sortedBookmarks = getSortedBookmarks(filteredBookmarks);
@@ -194,8 +194,19 @@ function renderBookmarks() {
     bookmarksBody.innerHTML = '';
     
     if (sortedBookmarks.length === 0) {
-        emptyState.style.display = 'flex';
-        document.querySelector('.table-container').style.display = 'none';
+        if (searchTerm) {
+            emptyState.style.display = 'flex';
+            emptyState.innerHTML = `
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="color: #ADB5BD;">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <p style="color: #6C757D;">No se encontraron resultados para "${searchTerm}"</p>
+            `;
+            document.querySelector('.table-container').style.display = 'none';
+        } else {
+            showEmpty('No tienes bookmarks guardados en X');
+        }
     } else {
         emptyState.style.display = 'none';
         document.querySelector('.table-container').style.display = 'block';
@@ -204,17 +215,11 @@ function renderBookmarks() {
             const row = createBookmarkRow(bookmark, index);
             bookmarksBody.appendChild(row);
         });
-        
-        // Initialize Lucide icons after rendering
-        if (window.lucide) {
-            lucide.createIcons();
-        }
     }
     
     updateStats();
 }
 
-// Create bookmark row
 function createBookmarkRow(bookmark, index) {
     const tr = document.createElement('tr');
     tr.style.animationDelay = `${index * 30}ms`;
@@ -224,25 +229,20 @@ function createBookmarkRow(bookmark, index) {
             <span class="bookmark-id">${bookmark.id}</span>
         </td>
         <td>
-            <div class="bookmark-content">${bookmark.content}</div>
+            <div class="bookmark-content">${escapeHtml(bookmark.content)}</div>
         </td>
         <td>
             <span class="bookmark-date">${formatDate(bookmark.created_at)}</span>
         </td>
         <td>
             <div class="actions">
-                <button class="action-btn" onclick="editBookmark('${bookmark.id}')" aria-label="Editar">
+                <a href="https://x.com/i/web/status/${bookmark.id}" target="_blank" class="action-btn" aria-label="Ver en X">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                        <polyline points="15 3 21 3 21 9"></polyline>
+                        <line x1="10" y1="14" x2="21" y2="3"></line>
                     </svg>
-                </button>
-                <button class="action-btn delete" onclick="deleteBookmark('${bookmark.id}')" aria-label="Eliminar">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                </button>
+                </a>
             </div>
         </td>
     `;
@@ -250,7 +250,12 @@ function createBookmarkRow(bookmark, index) {
     return tr;
 }
 
-// Filter bookmarks by search term
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 function getFilteredBookmarks() {
     if (!searchTerm) return bookmarks;
     
@@ -260,8 +265,6 @@ function getFilteredBookmarks() {
         bookmark.content.toLowerCase().includes(term)
     );
 }
-
-// Sort bookmarks
 function getSortedBookmarks(bookmarksToSort) {
     const sorted = [...bookmarksToSort];
     
@@ -279,7 +282,6 @@ function getSortedBookmarks(bookmarksToSort) {
     }
 }
 
-// Format date
 function formatDate(dateString) {
     const date = new Date(dateString);
     const now = new Date();
@@ -303,16 +305,13 @@ function formatDate(dateString) {
     }
 }
 
-// Update statistics
 function updateStats() {
     const filtered = getFilteredBookmarks();
     totalBookmarksEl.textContent = bookmarks.length;
     visibleBookmarksEl.textContent = filtered.length;
 }
 
-// Event listeners
 function attachEventListeners() {
-    // Logout button
     if (logoutBtn) {
         logoutBtn.addEventListener('click', async (e) => {
             e.preventDefault();
@@ -322,7 +321,6 @@ function attachEventListeners() {
         });
     }
     
-    // Sort buttons
     sortButtons.forEach(btn => {
         btn.addEventListener('click', () => {
             currentSort = btn.dataset.sort;
@@ -332,7 +330,6 @@ function attachEventListeners() {
         });
     });
     
-    // View buttons
     viewButtons.forEach(btn => {
         btn.addEventListener('click', () => {
             currentView = btn.dataset.view;
@@ -347,13 +344,11 @@ function attachEventListeners() {
         });
     });
     
-    // Search input
     searchInput.addEventListener('input', (e) => {
         searchTerm = e.target.value;
         renderBookmarks();
     });
     
-    // Add initial compact view class
     document.body.classList.add('view-compact');
 }
 
@@ -363,38 +358,17 @@ async function logout() {
     } catch (err) {
         console.error('Error logging out:', err);
     } finally {
-        // Clear session regardless
         localStorage.removeItem('user_id');
         redirectToLogin('Sesión cerrada');
     }
 }
 
-// Action handlers (to be implemented)
-function editBookmark(id) {
-    console.log('Edit bookmark:', id);
-    // Implement edit functionality
-    alert(`Editar bookmark ${id} - Funcionalidad a implementar`);
-}
-
-function deleteBookmark(id) {
-    console.log('Delete bookmark:', id);
-    if (confirm('¿Estás seguro de que deseas eliminar este bookmark?')) {
-        bookmarks = bookmarks.filter(b => b.id !== id);
-        renderBookmarks();
-        // In production: send DELETE request to backend
-        // fetch(`/api/bookmarks/${id}`, { method: 'DELETE' })
-    }
-}
-
-// Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
-    // Ctrl/Cmd + K to focus search
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         searchInput.focus();
     }
     
-    // Escape to clear search
     if (e.key === 'Escape' && document.activeElement === searchInput) {
         searchInput.value = '';
         searchTerm = '';
@@ -402,3 +376,4 @@ document.addEventListener('keydown', (e) => {
         searchInput.blur();
     }
 });
+window.loadBookmarks = loadBookmarks;

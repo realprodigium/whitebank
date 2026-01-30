@@ -1,10 +1,13 @@
-document 
-.getElementById('login')
-.addEventListener('click', ()=>{
-    window.location.href = 'auth/x/login';
-})
+const loginBtn = document.getElementById('login');
+if (loginBtn) {
+    loginBtn.addEventListener('click', ()=>{
+        window.location.href = 'auth/x/login';
+    });
+}
 
-lucide.createIcons();
+if (typeof lucide !== 'undefined') {
+    lucide.createIcons();
+}
 
 document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
   anchor.addEventListener("click", function (e) {
