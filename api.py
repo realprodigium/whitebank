@@ -237,14 +237,14 @@ async def callback(request: Request):
             return {'error': 'failed to get user info', 'details': user_response.json()}
 
 @router.get('/api/bookmarks')
-async def get_bookmarks(user_id: str, query: Optional[str] = None, max_results: int = 10):
+async def get_bookmarks(user_id: str, query: Optional[str] = None, max_results: int = 0):
     try:
-        print(f'\n=== BOOKMARKS REQUEST ===')
+        print(f'\n---- BOOKMARKS REQUEST ----')
         print(f'User ID: {user_id}')
         print(f'Max Results: {max_results}')
         
         if not user_id or not isinstance(user_id, str):
-            print('❌ Invalid user_id')
+            print('Invalid user_id')
             return JSONResponse(
                 status_code=400,
                 content={'error': 'Invalid user_id', 'data': []}
@@ -270,7 +270,7 @@ async def get_bookmarks(user_id: str, query: Optional[str] = None, max_results: 
         conn.close()
         
         if not row:
-            print('❌ User not authenticated (not in DB)')
+            print('User not authenticated (not in DB)')
             return JSONResponse(
                 status_code=401,
                 content={'error': 'User not authenticated', 'data': []}
@@ -285,7 +285,7 @@ async def get_bookmarks(user_id: str, query: Optional[str] = None, max_results: 
         print(f'Refresh Token exists: {"YES" if refresh_token else "NO"}')
         
         if not access_token or not access_token.strip():
-            print('❌ Invalid or empty access_token')
+            print('Invalid or empty access_token')
             return JSONResponse(
                 status_code=401,
                 content={'error': 'Invalid token', 'data': []}

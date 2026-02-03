@@ -18,7 +18,7 @@ const emptyState = document.getElementById('emptyState');
 const totalBookmarksEl = document.getElementById('totalBookmarks');
 const visibleBookmarksEl = document.getElementById('visibleBookmarks');
 const searchInput = document.getElementById('search');
-const sortButtons = document.querySelectorAll('.sort-btn');
+const sortSelect = document.getElementById('sortSelect');
 const viewButtons = document.querySelectorAll('.view-btn');
 const logoutBtn = document.querySelector('.logout-btn');
 const usernameEl = document.getElementById('username');
@@ -76,7 +76,7 @@ function loadBookmarks(retryCount = 0) {
     
     console.log('Fetching bookmarks for user:', userId, `(Attempt ${retryCount + 1})`);
     
-    fetch(`/api/bookmarks?user_id=${userId}&max_results=100`, {
+    fetch(`/api/bookmarks?user_id=${userId}&max_results=10`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     })
@@ -321,14 +321,12 @@ function attachEventListeners() {
         });
     }
     
-    sortButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            currentSort = btn.dataset.sort;
-            sortButtons.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', () => {
+            currentSort = sortSelect.value;
             renderBookmarks();
         });
-    });
+    }
     
     viewButtons.forEach(btn => {
         btn.addEventListener('click', () => {

@@ -3,83 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhiteBank | Dashboard</title>
+    <title>Bookmarks | Collection</title>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link href="{{ url_for('static', path='dash.css') }}" rel="stylesheet">
 </head>
 <body>
     <header class="header">
         <div class="header-content">
-            <div class="logo">WhiteBank</div>
+            <div class="logo">Bookmarks</div>
             <div class="user-info">
-                <span class="username" id="username">Welcome, {{ username }}</span>
-                <button class="logout-btn" aria-label="Cerrar sesión">
+                <span class="username" id="username">@{{ username }}</span>
+                <button class="logout-btn" aria-label="Cerrar sesión" title="Cerrar sesión">
                     <i data-lucide="log-out"></i>
                 </button>
             </div>
         </div>
     </header>
 
-    <main class="container">
-        <aside class="sidebar">
-            <div class="control-section">
-                <h3 class="control-title">Sort</h3>
-                <nav class="sort-nav" role="navigation" aria-label="Ordenar bookmarks">
-                    <button class="sort-btn active" data-sort="latest">
-                        Newest
-                    </button>
-                    <button class="sort-btn" data-sort="oldest">
-                        Oldest
-                    </button>
-                    <button class="sort-btn" data-sort="alpha">
-                        A-Z
-                    </button>
-                    <button class="sort-btn" data-sort="reverse_alpha">
-                        Z-A
-                    </button>
-                </nav>
+    <main class="app-container">
+        <div class="toolbar">
+            <div class="search-box">
+                <i data-lucide="search"></i>
+                <input 
+                    type="search" 
+                    id="search" 
+                    class="search-input" 
+                    placeholder="Buscar..."
+                    aria-label="Buscar bookmarks"
+                >
             </div>
-
-            <div class="control-section">
-                <h3 class="control-title">Filter</h3>
-                <div class="filter-group">
-                    <input 
-                        type="search" 
-                        id="search" 
-                        class="search-input" 
-                        placeholder="Buscar en bookmarks..."
-                        aria-label="Buscar bookmarks"
-                    >
-                </div>
-            </div>
-
-            <div class="control-section">
-                <h3 class="control-title">View</h3>
+            
+            <div class="toolbar-controls">
+                <select id="sortSelect" class="sort-select">
+                    <option value="latest">Más recientes</option>
+                    <option value="oldest">Más antiguos</option>
+                    <option value="alpha">A-Z</option>
+                    <option value="reverse_alpha">Z-A</option>
+                </select>
+                
                 <div class="view-toggle">
-                    <button class="view-btn active" data-view="compact" aria-label="Vista compacta">
+                    <button class="view-btn active" data-view="compact" aria-label="Vista compacta" title="Compacta">
+                        <i data-lucide="list"></i>
                     </button>
-                    <button class="view-btn" data-view="detailed" aria-label="Vista detallada">
+                    <button class="view-btn" data-view="detailed" aria-label="Vista detallada" title="Detallada">
+                        <i data-lucide="layout-grid"></i>
                     </button>
                 </div>
             </div>
+        </div>
 
-            <div class="stats">
-                <div class="stat-item">
-                    <span class="stat-value" id="totalBookmarks">0</span>
-                    <span class="stat-label">Total</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-value" id="visibleBookmarks">0</span>
-                    <span class="stat-label"></span>
-                </div>
+        <div class="stats-bar">
+            <div class="stat">
+                <span class="stat-label">Total</span>
+                <span class="stat-value" id="totalBookmarks">0</span>
             </div>
-        </aside>
+            <div class="stat">
+                <span class="stat-label">Visible</span>
+                <span class="stat-value" id="visibleBookmarks">0</span>
+            </div>
+        </div>
 
         <section class="content">
-            <div class="content-header">
-                <h1 class="greeting">Bookmarks on you X</h1>
-            </div>
-
             <div class="table-container">
                 <table class="bookmarks-table" id="bookmarksTable">
                     <thead>
@@ -87,7 +71,7 @@
                             <th class="col-id">ID</th>
                             <th class="col-content">Contenido</th>
                             <th class="col-date">Fecha</th>
-                            <th class="col-actions">Acciones</th>
+                            <th class="col-actions"></th>
                         </tr>
                     </thead>
                     <tbody id="bookmarksBody">
@@ -96,8 +80,8 @@
             </div>
 
             <div class="empty-state" id="emptyState" style="display: none;">
-                <i data-lucide="bookmark-x"></i>
-                <p>No se encontraron bookmarks</p>
+                <i data-lucide="bookmark"></i>
+                <p>Sin resultados</p>
             </div>
         </section>
     </main>
